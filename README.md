@@ -1,6 +1,5 @@
 # devops-pipeline
 
-
 ## Getting Started
 
 ```bash
