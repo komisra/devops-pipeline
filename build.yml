@@ -1,0 +1,47 @@
+# variables: 
+#   BASH_ENV: "/root/Ghost"
+
+lifecycle:
+
+setup:
+  - command: apt-get update
+  - command: wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  - apt: ./google-chrome-stable_current_amd64.deb
+  - apt: python
+  - apt: git
+  - command: curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt-get install -y nodejs
+  - command: curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+  - command: npm install --global yarn
+  - git: https://github.com/TryGhost/Ghost.git
+
+jobs:
+  analysis:
+    - eslint:
+        dir: /root/Ghost/ghost/core
+        rules:
+          "no-unmodified-loop-condition": "error"
+          "no-unreachable": "error"
+          "no-unused-vars": "warn"
+  build:
+    - name: install packages needed for yarn
+      command: cd /root/Ghost/ && yarn global add knex-migrator ember-cli
+    - name: fix dependency errors
+      command: rm /root/Ghost/yarn.lock && yarn cache clean
+    - name: yarn setup
+      command: cd /root/Ghost && yarn setup
+    - name: initialize fresh database
+      command: cd /root/Ghost && yarn knex-migrator init
+    - name: build Ghost from source
+      command: cd /root/Ghost && yarn build
+    - name: fix dependency errors
+      command: rm /root/Ghost/yarn.lock && yarn cache clean
+    - name: Run server tests
+      command: cd /root/Ghost && yarn test
+    - name: go to ghost/admin directory to run client tests
+      command: cd /root/Ghost/admin && ember test
+  deploy:
+    - blue-green:
+      - name: start Ghost 4 container (blue)
+        command: docker run -d -p 5001:2368 -v ~/blue:/var/lib/ghost/content --name blue ghost:4
+      - name: start Ghost 5 container (green)
+        command: docker run -d -p 5002:2368 -v ~/green:/var/lib/ghost/content --name green ghost:4
